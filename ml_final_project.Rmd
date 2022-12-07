@@ -1,0 +1,480 @@
+---
+title: "ML_final_project"
+author: "Rachel Jacobson"
+date: '2022-12-05'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+#load packages
+library(tidyverse)
+library(rio)
+library(here)   
+library(recipes)
+library(ggplot2)
+library(dplyr) 
+library(stringr)
+library(finalfit)
+```
+
+
+```{r}
+#import data
+mushroom <- import("secondary_data.csv")
+str(mushroom)
+```
+
+```{r}
+#remove empty columns
+mushroom <- mushroom %>% select(-c(8, 19))
+
+```
+```{r}
+#rename data frame
+mushroom <- mushroom %>% rename("diameter_c" = "cap-diameter",
+                                "shape_c" = "cap-shape", 
+                                "surface_c" = "cap-surface",
+                                "color_c" = "cap-color",
+                                "g_attachment" = "gill-attachment",
+                                "bruise_bleed" = "does-bruise-or-bleed",
+                                "g_color" = "gill-color",
+                                "s_height" = "stem-height",
+                                "s_width" = "stem-width",
+                                "s_root" = "stem-root",
+                                "s_surface" = "stem-surface",
+                                "s_color" = "stem-color",
+                                "veil_type" = "veil-type",
+                                 "v_color" = "veil-color",
+                                "ring" = "has-ring", 
+                                "type_ring" = "ring-type")
+```
+```{r}
+str(mushroom)
+
+which(is.na(mushroom))
+
+
+```
+
+
+
+```{r}
+
+#create recipe
+blueprint_shroom <- recipe(x  = mushroom,
+                          vars  = colnames(mushroom),
+                          roles = c('outcome',rep('predictor',18))) %>%
+                    step_dummy(all_nominal_predictors(), one_hot=TRUE) %>%
+                    step_harmonic('season', frequency=1, cycle_size=4, role='predictor') 
+
+                    step_normalize(c('season_sin_1','season_cos_1'))
+                                       
+                       
+blueprint_shroom %>% prep() %>% summary
+
+```
+
+```{r}
+#split data into two original data sets
+
+set.seed(10312022)  # for reproducibility, 80% test data
+  
+loc      <- sample(1:nrow(mushroom), round(nrow(mushroom) * 0.8))
+shroom_tr  <- mushroom[loc, ]
+shroom_te  <- mushroom[-loc, ]
+
+dim(shroom_tr)
+
+dim(shroom_te)
+
+```
+
+## Logistic Model without Regularization
+
+```{r}
+
+library(caret) 
+
+# Randomly shuffle the training dataset
+
+  set.seed(11042022) # for reproducibility
+
+  shroom_tr = shroom_tr[sample(nrow(shroom_tr)),]
+
+# Create 10 folds with equal size
+
+  folds = cut(seq(1,nrow(shroom_tr)),breaks=10,labels=FALSE)
+  
+# Create the list for each fold 
+      
+  my.indices <- vector('list',10)
+
+  for(i in 1:10){
+    my.indices[[i]] <- which(folds!=i)
+  }
+
+
+```
+
+```{r}
+cv <- trainControl(method          = "cv",
+                   index           = my.indices,
+                   classProbs      = TRUE,
+                   summaryFunction = mnLogLoss)
+
+```
+
+```{r}
+
+#train the logistic regression model
+caret_mod <- caret::train(blueprint_shroom, 
+                          data      = shroom_tr, 
+                          method    = "glm",
+                          family    = 'binomial',
+                          metric    = 'logLoss',
+                          trControl = cv)
+
+caret_mod
+
+```
+```{r}
+#performance evaluation
+predicted_te <- predict(caret_mod, tweet_te, type='prob')
+
+dim(predicted_te)
+
+head(predicted_te)
+```
+
+```{r}
+
+group0 <- which(shroom_te$class== "p")
+group1 <- which(shroom_te$class=="e")
+
+plot(density(predicted_te[group0,]$p,adjust=1.5),xlab='',main='')
+points(density(predicted_te[group1,]$p,adjust=1.5),lty=2,type='l')
+legend(x=0.8,y=2.75,c('poisonous','edible'),lty=c(1,2),bty='n')
+
+```
+
+```{r}
+predicted_te[group0,]$p
+
+```
+```{r}
+library(cutpointr)
+```
+```{r}
+#AUC (evaluates predictive power of classification models)
+cut.obj <- cutpointr(x     = predicted_te$p,
+                     class = shroom_te$class)
+```
+```{r}
+#The closer AUC is to 0.5, the closer predictive power is to random guessing
+
+auc(cut.obj)
+#ACC
+pred_class <- ifelse(predicted_te$Positive>.5,1,0)
+
+confusion <- table(shroom_te$class,pred_class)
+
+confusion
+```
+```{r}
+#accuracy 
+(confusion[2,2] + confusion[1,1])/(confusion[2,2] + confusion[1,1] + confusion[1,2] + confusion[2,1])
+#TPR (sensitivity)
+confusion[2,2]/(confusion[2,1]+confusion[2,2])
+#TNR (specificity)
+confusion[1,1]/(confusion[1,1]+confusion[1,2])
+#PRE
+confusion[2,2]/(confusion[1,2]+confusion[2,2])
+
+```
+
+## Logistic Regression Ridge Penalty
+
+```{r}
+library(caret)
+
+# Randomly shuffle the training dataset
+
+set.seed(11042022) # for reproducibility
+
+  tweet_tr = tweet_tr[sample(nrow(tweet_tr)),]
+
+# Create 10 folds with equal size
+
+  folds = cut(seq(1,nrow(tweet_tr)),breaks=10,labels=FALSE)
+  
+# Create the list for each fold 
+      
+  my.indices <- vector('list',10)
+
+  for(i in 1:10){
+    my.indices[[i]] <- which(folds!=i)
+  }
+```
+
+```{r}
+
+cv <- trainControl(method          = "cv",
+                   index           = my.indices,
+                   classProbs      = TRUE,
+                   summaryFunction = mnLogLoss)
+```
+
+```{r}
+# Hyperparameter tuning grid for ridge penalty (lambda), alpha = 0
+
+grid <- data.frame(alpha = 0, lambda = c(seq(0,.001,.00001),.005,.01,.05,.1)) 
+grid
+
+```
+```{r}
+
+#train logistic model
+
+Sys.time()
+
+caret_logistic_ridge <- caret::train(blueprint_tweet, 
+                                     data      = tweet_tr, 
+                                     method    = "glmnet",
+                                     family    = 'binomial',
+                                     metric    = 'logLoss',
+                                     trControl = cv,
+                                     tuneGrid  = grid)
+
+Sys.time()
+
+```
+```{r}
+
+# check the results
+
+plot(caret_logistic_ridge)
+
+```
+```{r}
+
+# Optimal lambda penalty
+
+caret_logistic_ridge$bestTune
+
+
+```
+
+```{r}
+
+#performance evaluation
+predicted_te <- predict(caret_logistic_ridge, tweet_te, type='prob')
+
+dim(predicted_te)
+
+```
+
+```{r}
+head(predicted_te)
+
+```
+
+```{r}
+#check for separation in distribution
+group0 <- which(tweet_te$sentiment==0)
+group1 <- which(tweet_te$sentiment==1)
+
+plot(density(predicted_te[group0,]$Positive,adjust=1.5),xlab='',main='')
+points(density(predicted_te[group1,]$Positive,adjust=1.5),lty=2,type='l')
+legend(x=0.8,y=2.75,c('Negative','Positive'),lty=c(1,2),bty='n')
+
+
+```
+```{r}
+#LL for lamda = 0.1
+caret_logistic_ridge
+
+
+```
+```{r}
+
+# Compute the AUC
+
+cut.obj <- cutpointr(x     = predicted_te$Positive,
+                     class = tweet_te$sentiment)
+auc(cut.obj)
+
+
+```
+```{r}
+# Confusion matrix assuming the threshold is 0.5
+
+pred_class <- ifelse(predicted_te$Positive>.5,1,0)
+
+confusion <- table(tweet_te$sentiment,pred_class)
+
+confusion
+```
+
+```{r}
+#accuracy 
+(confusion[2,2] + confusion[1,1])/(confusion[2,2] + confusion[1,1] + confusion[1,2] + confusion[2,1])
+
+#TPR (sensitivity)
+confusion[2,2]/(confusion[2,1]+confusion[2,2])
+
+#TNR (specificity)
+confusion[1,1]/(confusion[1,1]+confusion[1,2])
+
+#PRE
+confusion[2,2]/(confusion[1,2]+confusion[2,2])
+
+```
+
+
+## Logistic Regression with Lasso Penalty
+
+```{r}
+# Randomly shuffle the training dataset
+
+  set.seed(11042022) # for reproducibility
+
+  tweet_tr = tweet_tr[sample(nrow(tweet_tr)),]
+
+# Create 10 folds with equal size
+
+  folds = cut(seq(1,nrow(tweet_tr)),breaks=10,labels=FALSE)
+  
+# Create the list for each fold 
+      
+  my.indices <- vector('list',10)
+
+  for(i in 1:10){
+    my.indices[[i]] <- which(folds!=i)
+  }
+
+
+```
+```{r}
+cv <- trainControl(method          = "cv",
+                   index           = my.indices,
+                   classProbs      = TRUE,
+                   summaryFunction = mnLogLoss)
+
+```
+
+```{r}
+# Hyperparameter tuning grid for lasso penalty (lambda), alpha = 1
+
+grid <- data.frame(alpha = 1, lambda = seq(0,.001,.00001)) 
+grid
+
+```
+
+```{r}
+
+#train logistic model
+
+Sys.time()
+
+caret_logistic_lasso <- caret::train(blueprint_tweet, 
+                                     data      = tweet_tr, 
+                                     method    = "glmnet",
+                                     family    = 'binomial',
+                                     metric    = 'logLoss',
+                                     trControl = cv,
+                                     tuneGrid  = grid)
+
+Sys.time()
+
+```
+
+```{r}
+# check the results
+
+plot(caret_logistic_lasso)
+
+```
+```{r}
+
+# Optimal lambda penalty
+
+caret_logistic_lasso$bestTune
+
+
+```
+
+```{r}
+#performance eval
+predicted_te <- predict(caret_logistic_lasso, tweet_te, type='prob')
+
+dim(predicted_te)
+
+head(predicted_te)
+
+
+```
+```{r}
+#distribution
+group0 <- which(tweet_te$sentiment==0)
+group1 <- which(tweet_te$sentiment==1)
+
+plot(density(predicted_te[group0,]$Positive,adjust=1.5),xlab='',main='')
+points(density(predicted_te[group1,]$Positive,adjust=1.5),lty=2,type='l')
+legend(x=0.8,y=2.75,c('Negative','Positive'),lty=c(1,2),bty='n')
+
+```
+```{r}
+#LL for lamda = 0.001
+caret_logistic_lasso
+
+#0.8895893
+
+
+```
+```{r}
+# Compute the AUC
+
+cut.obj <- cutpointr(x     = predicted_te$Positive,
+                     class = tweet_te$sentiment)
+
+auc(cut.obj)
+
+
+```
+```{r}
+
+pred_class <- ifelse(predicted_te$Positive>.5,1,0)
+
+confusion <- table(tweet_te$sentiment,pred_class)
+
+confusion
+
+
+```
+
+```{r}
+#accuracy 
+(confusion[2,2] + confusion[1,1])/(confusion[2,2] + confusion[1,1] + confusion[1,2] + confusion[2,1])
+
+#TPR (sensitivity)
+confusion[2,2]/(confusion[2,1]+confusion[2,2])
+
+#TNR (specificity)
+confusion[1,1]/(confusion[1,1]+confusion[1,2])
+
+#PRE
+confusion[2,2]/(confusion[1,2]+confusion[2,2])
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
