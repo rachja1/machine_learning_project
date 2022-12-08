@@ -9,6 +9,8 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+For the Github repo, see <https://github.com/rachja1/machine_learning_project> 
+
 ## R Markdown
 
 This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
@@ -74,10 +76,7 @@ which(is.na(mushroom))
 blueprint_shroom <- recipe(x  = mushroom,
                           vars  = colnames(mushroom),
                           roles = c('outcome',rep('predictor',18))) %>%
-                    step_dummy(all_nominal_predictors(), one_hot=TRUE) %>%
-                    step_harmonic('season', frequency=1, cycle_size=4, role='predictor') 
-
-                    step_normalize(c('season_sin_1','season_cos_1'))
+                    step_dummy(all_nominal_predictors(), one_hot=TRUE)
                                        
                        
 blueprint_shroom %>% prep() %>% summary
@@ -146,10 +145,12 @@ caret_mod <- caret::train(blueprint_shroom,
 
 caret_mod
 
+#LL = 6.648119
+
 ```
 ```{r}
 #performance evaluation
-predicted_te <- predict(caret_mod, tweet_te, type='prob')
+predicted_te <- predict(caret_mod, shroom_te, type='prob')
 
 dim(predicted_te)
 
@@ -183,10 +184,13 @@ cut.obj <- cutpointr(x     = predicted_te$p,
 #The closer AUC is to 0.5, the closer predictive power is to random guessing
 
 auc(cut.obj)
-#ACC
-pred_class <- ifelse(predicted_te$Positive>.5,1,0)
 
-confusion <- table(shroom_te$class,pred_class)
+#AUC = 0.922
+
+#ACC
+pred_class <- ifelse(predicted_te$p>.5,1,0)
+
+confusion <- table(shroom_te$class, pred_class)
 
 confusion
 ```
@@ -211,11 +215,11 @@ library(caret)
 
 set.seed(11042022) # for reproducibility
 
-  tweet_tr = tweet_tr[sample(nrow(tweet_tr)),]
+  shroom_tr = shroom_tr[sample(nrow(shroom_tr)),]
 
 # Create 10 folds with equal size
 
-  folds = cut(seq(1,nrow(tweet_tr)),breaks=10,labels=FALSE)
+  folds = cut(seq(1,nrow(shroom_tr)),breaks=10,labels=FALSE)
   
 # Create the list for each fold 
       
@@ -247,8 +251,8 @@ grid
 
 Sys.time()
 
-caret_logistic_ridge <- caret::train(blueprint_tweet, 
-                                     data      = tweet_tr, 
+caret_logistic_ridge <- caret::train(blueprint_shroom, 
+                                     data      = shroom_tr, 
                                      method    = "glmnet",
                                      family    = 'binomial',
                                      metric    = 'logLoss',
@@ -277,7 +281,7 @@ caret_logistic_ridge$bestTune
 ```{r}
 
 #performance evaluation
-predicted_te <- predict(caret_logistic_ridge, tweet_te, type='prob')
+predicted_te <- predict(caret_logistic_ridge, shroom_te, type='prob')
 
 dim(predicted_te)
 
@@ -290,27 +294,28 @@ head(predicted_te)
 
 ```{r}
 #check for separation in distribution
-group0 <- which(tweet_te$sentiment==0)
-group1 <- which(tweet_te$sentiment==1)
+group0 <- which(shroom_te$class=="p")
+group1 <- which(shroom_te$class=="e")
 
-plot(density(predicted_te[group0,]$Positive,adjust=1.5),xlab='',main='')
-points(density(predicted_te[group1,]$Positive,adjust=1.5),lty=2,type='l')
-legend(x=0.8,y=2.75,c('Negative','Positive'),lty=c(1,2),bty='n')
+plot(density(predicted_te[group0,]$p,adjust=1.5),xlab='',main='')
+points(density(predicted_te[group1,]$p,adjust=1.5),lty=2,type='l')
+legend(x=0.8,y=2.75,c('Edible','Poisonous'),lty=c(1,2),bty='n')
 
 
 ```
 ```{r}
-#LL for lamda = 0.1
+#LL for lamda = 0.005
 caret_logistic_ridge
 
+#0.3629714
 
 ```
 ```{r}
 
 # Compute the AUC
 
-cut.obj <- cutpointr(x     = predicted_te$Positive,
-                     class = tweet_te$sentiment)
+cut.obj <- cutpointr(x     = predicted_te$p,
+                     class = shroom_te$class)
 auc(cut.obj)
 
 
@@ -318,9 +323,9 @@ auc(cut.obj)
 ```{r}
 # Confusion matrix assuming the threshold is 0.5
 
-pred_class <- ifelse(predicted_te$Positive>.5,1,0)
+pred_class <- ifelse(predicted_te$p>.5,1,0)
 
-confusion <- table(tweet_te$sentiment,pred_class)
+confusion <- table(shroom_te$class,pred_class)
 
 confusion
 ```
@@ -348,11 +353,11 @@ confusion[2,2]/(confusion[1,2]+confusion[2,2])
 
   set.seed(11042022) # for reproducibility
 
-  tweet_tr = tweet_tr[sample(nrow(tweet_tr)),]
+  shroom_tr = shroom_tr[sample(nrow(shroom_tr)),]
 
 # Create 10 folds with equal size
 
-  folds = cut(seq(1,nrow(tweet_tr)),breaks=10,labels=FALSE)
+  folds = cut(seq(1,nrow(shroom_tr)),breaks=10,labels=FALSE)
   
 # Create the list for each fold 
       
@@ -386,8 +391,8 @@ grid
 
 Sys.time()
 
-caret_logistic_lasso <- caret::train(blueprint_tweet, 
-                                     data      = tweet_tr, 
+caret_logistic_lasso <- caret::train(blueprint_shroom, 
+                                     data      = shroom_tr, 
                                      method    = "glmnet",
                                      family    = 'binomial',
                                      metric    = 'logLoss',
@@ -415,7 +420,7 @@ caret_logistic_lasso$bestTune
 
 ```{r}
 #performance eval
-predicted_te <- predict(caret_logistic_lasso, tweet_te, type='prob')
+predicted_te <- predict(caret_logistic_lasso, shroom_te, type='prob')
 
 dim(predicted_te)
 
@@ -425,27 +430,27 @@ head(predicted_te)
 ```
 ```{r}
 #distribution
-group0 <- which(tweet_te$sentiment==0)
-group1 <- which(tweet_te$sentiment==1)
+group0 <- which(shroom_te$class== "p")
+group1 <- which(shroom_te$class=="e")
 
-plot(density(predicted_te[group0,]$Positive,adjust=1.5),xlab='',main='')
-points(density(predicted_te[group1,]$Positive,adjust=1.5),lty=2,type='l')
-legend(x=0.8,y=2.75,c('Negative','Positive'),lty=c(1,2),bty='n')
+plot(density(predicted_te[group0,]$p,adjust=1.5),xlab='',main='')
+points(density(predicted_te[group1,]$p,adjust=1.5),lty=2,type='l')
+legend(x=0.8,y=2.75,c('Edible','Poisonous'),lty=c(1,2),bty='n')
 
 ```
 ```{r}
 #LL for lamda = 0.001
 caret_logistic_lasso
 
-#0.8895893
+#0.3497562
 
 
 ```
 ```{r}
 # Compute the AUC
 
-cut.obj <- cutpointr(x     = predicted_te$Positive,
-                     class = tweet_te$sentiment)
+cut.obj <- cutpointr(x     = predicted_te$p,
+                     class = shroom_te$class)
 
 auc(cut.obj)
 
@@ -453,9 +458,9 @@ auc(cut.obj)
 ```
 ```{r}
 
-pred_class <- ifelse(predicted_te$Positive>.5,1,0)
+pred_class <- ifelse(predicted_te$p>.5,1,0)
 
-confusion <- table(tweet_te$sentiment,pred_class)
+confusion <- table(shroom_te$class,pred_class)
 
 confusion
 
@@ -474,6 +479,36 @@ confusion[1,1]/(confusion[1,1]+confusion[1,2])
 
 #PRE
 confusion[2,2]/(confusion[1,2]+confusion[2,2])
+
+```
+
+## Visualize findings
+
+```{r}
+#model comparison
+library(DT)
+
+
+data= matrix(c(6.65,0.922, 0.849, 0.854, 0.844, 0.872, 0.363, 0.920, 0.849, 0.854, 0.843, 0.872, 0.350, 0.922, 0.850, 0.860, 0.843, 0.872), ncol=6, byrow=TRUE)
+# specify the column names and row names of matrix
+colnames(data) = c('<em>LL<em>', '<em>AUC<em>', '<em>ACC<em>', '<em>TPR<em>', '<em>TNR<em>', '<em>PRE<em>')
+rownames(data) <- c('Logistic Regression','Logistic Regression with Ridge Penalty','Logistic Regression with Lasso Penalty')
+```
+```{r}
+#create table
+datatable(data, escape = FALSE)
+
+```
+
+
+```{r}
+#10 top predictor variables
+
+#Variable importance
+library(vip)
+
+vip(caret_logistic_lasso,num_features = 10, geom = "point") + theme_bw()
+
 
 ```
 
