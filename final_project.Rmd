@@ -1,0 +1,108 @@
+---
+title             : "Machine Learning Final Project"
+shorttitle        : "To Be or Not to Be: Poisonous Mushrooms"
+
+author: 
+  - name          : "Rachel Jacobson"
+    affiliation   : "University of Oregon"
+
+bibliography      : ["r-references.bib"]
+always_allow_html: true
+floatsintext      : no
+figurelist        : no
+tablelist         : no
+footnotelist      : no
+linenumbers       : no
+mask              : no
+draft             : no
+
+documentclass     : "apa6"
+classoption       : "man"
+output            : papaja::apa6_pdf
+---
+
+```{r setup, include = FALSE}
+library("papaja")
+r_refs("r-references.bib")
+library(tidyverse)
+library(rio)
+library(here)   
+library(recipes)
+library(ggplot2)
+library(dplyr) 
+library(stringr)
+library(finalfit)
+library(caret)
+```
+
+```{r analysis-preferences}
+# Seed for random number generation
+set.seed(42)
+knitr::opts_chunk$set(cache.extra = knitr::rand_seed)
+```
+
+For the Github repo, see <https://github.com/rachja1/machine_learning_project>
+
+# Research Problem
+There are over 5,000 known species of mushrooms around the world. Mushroom foraging is practiced across the United States, from coast to coast. It’s been culturally rooted in rituals and traditional dishes worldwide. Mushrooms possess an umami flavor, one of the five senses, and their medicinal qualities, ranging from indoles, polyphenols, polysaccharides and carotenoids, have deemed it a nutritionally staple food (Brandenburg et al., 2018). However, among plant toxicity cases, the majority of individuals die from poisonous mushrooms due to inexperience in foraging or from the novelty of species (Eren et al., 2010; Gul et al., 2020). There are health complications from gastroenteritis and liver intoxication, where consumption can have long lasting impacts. Mushroom foraging is a pastime practiced by biologists, nomadic people, and chefs globally. To develop a model that inputs the properties of the mushroom and outputs whether the fungi is edible or poisonous has the potential to reduce the ingestion of inedible mushrooms and, more impactful, save numerous lives, where those who stumble upon indigestible species could lead to fatal outcomes. 
+
+# Data Description
+The data is originally comprised of 21 columns and 61,069 rows. Two of the columns, gill-spacing and spore-print-color, were empty and removed from the data frame. There were 16 of the 19 remaining columns that were renamed for a clearer distinction across words. Specifically, in creating the blueprint, there was difficulty in R distinguishing “cap-shape” from “cap-color” as separate objects. Now cap shape is labeled as “shape_c” and cap color is “color_c.” There are 3 continuous variables and 15 categorical variables. The continuous variables are the following: “diameter_c” (cap diameter in cm); “s-height” (stem height in cm); “s-width” (stem width in mm). 
+
+The predictor categorical variables are defined as follows: 
+1. “shape_c” (cap shape) = b (bell), c (conical), x (convex), f (flat), s (sunken), p (spherical), o (others)
+2.“surface_c”  (cap surface) = i (fibrous), g (grooves), y (scaly), s (smooth), h (shiny), l (leathery), k (silky), t (sticky), w (wrinkled), e (fleshy)
+3.	“color_c” (cap color) = n (brown), b (buff), g (gray), r (green), p (pink), u (purple), e (red), w (white), o (orange), k (black), y (yellow), l (blue) 4. “bruise_bleed” (does bruise or bleed) = t (yes), f (no)
+5.	“g_attachment” (gill attachment) = a (adnate), x (adnexed), d (decurrent), e (free), s (sinuate), p (pores), f (none)
+6. “g_color” (gill color) = see cap color, f (none)
+7.	“s_root” (stem root) = b (bulbous), s (swollen), c (club), u (cup), e (equal), z (rhizomorphs), r (rooted)
+8.“s_surface” (stem surface) = see cap surface, f (none)
+9. “s_color” (stem color) = see cap color, f (none)
+10. “veil_type” (type of veil) = p (partial), u (universal)
+11. “v_color” (veil color) = see cap color, f (none)
+12. “ring” (has ring) = t (yes), f (no)
+13. “type_ring” = c (cobwebby), e (evanescent), r (flaring), g (grooved), l (large), p (pendant), s (sheathing), z (zone), y (scaly), m (movable), f (none); 14. “habitat” = g (grasses), l (leaves), m (meadows), p (paths), h (heaths), u (urban), w (waste), d (woods)
+15. “season” = s (spring), u (summer), a (autumn), w (winter)
+
+Categorical variables will be transformed into dummy variables prior to forming our predictive models. To account for any missing data, I identified the NAs to be replaced with the computed mean or median value. However, there were no NAs in the dataset. Our outcome variable is the first column in the data, class, which is either poisonous, “p”, or edible, “e”. I will predict whether mushrooms are poisonous, or edible based on their characteristics. 
+
+# Description of the Models
+Since the outcome variable (class) is a binary outcome, I will run three logistic regression models for classification: one without regularization, one with a lasso penalty, and one with a ridge penalty. Comparing the non-regularized logistic regression with the penalized models will allow me to consider tradeoff between introducing bias and reducing model variance. Another way this is conceptualized finding the balance between overfitting (non-penalized) and underfitting (penalized). The penalized regression models would allow me to reduce the likelihood that a model overfits when applying to other non-training datasets through hyperparameters. Hyperparameters are defined as non-estimable coefficients determined by the user through the process of tuning. The hyperparameters for both ridge and lasso are alpha and lambda. The lambda value is associated with the degree of penalty in the model. The two penalized regression models differ in alpha-value, where in ridge, alpha = 0, for lasso, alpha = 1. However, these may not increase the predictive performance. To evaluate model performance, I will compare Logloss values across all three models, as well as AUC, accuracy, precision, and sensitivity values (true positive rate and true negative rate). This will determine which model optimally performs. 
+
+# Model Fit
+I will use the logistics regression with lasso penalty to predict poisonous mushrooms. The optimal predicted model would have a low reported Logloss value, to which the lasso penalty model has at 0.35. It also has the highest accuracy and precision across models at 0.85 and 0.872, respectively. In Table 1, we can compare across the predictive models. We see that the ridge and non-penalized logistic regression yield lower performance. While the logistic regression model with ridge penalty is a close second in optimal evaluative performance from lasso, lasso’s Logloss, accuracy, and TPR values make the model the more robust decision. It’s a classification problem, where the cut-off for whether the mushroom is edible or non-edible was determined by the creator of the dataset. However, I can imagine that the criterion for edible mushrooms is that they do not include any side effects. If I were to collect 600,000 mushrooms myself, I would make the cut-off where a mushroom should be categorized as ‘non-edible’ if it gives the forager diarrhea, nausea, or indigestion. In considering different cut-off points, I concede that poisonous is not equivalent to inedible. Non-poisonous may irritate the internal digestive tract and include mild side effects but not prove fatal. Regardless, the dataset measures for nearly fatal and the cut-off point likely reflects that.  
+
+```{r}
+knitr::include_graphics("model_compare.png")
+```
+
+
+# Discussion/Conclusion
+
+```{r}
+knitr::include_graphics("predictor.png")
+
+```
+
+The ten predictor variables of highest importance for poisonous mushrooms are presented in Figure 2.  Variables of the highest importance are when the ring type is movable and the veil color is yellow. Based on evolution literature, the color of the mushroom is typically an adaptive characteristic, where yellow may be a warning that it’s poisonous (to avoid being eaten). In those cases, the animals cognizant of this pattern avoid it, where the mushroom remains undamaged. It appears that, in this case, color of the fungi matters. Other important variables are when the stem root is a club shape and when the habitat is a path. This is not surprising to me, in that if I were to see mushroom shaped oddly out in the woods, I would be skeptical to eat those. Expressing distrust in mushrooms, unless absolutely certain the mushroom is edible, should be normative. The models were surprisingly close in performance. They did not differ too much in accuracy, precision or sensitivity values. In that case, although I went with the logistic regression with the lasso penalty, I v could have had as sufficient predictive power with the ridge or non-penalized, in that order. I do believe that this research can be applied to my own research. While I don’t study mushrooms for psychology, I study humans of varying ethnicities and races. In particular, I’ve created a codebook that categorizes multiracial individuals into themes, analogous to typologies. Perhaps, if I were to collect narratives with a sample size of 1,000 or 2,000, I could use the word embedding features and individual characteristics to predict which type of multiracial individual they identify as. It’s possible that their sociocultural factors predict how strongly they identify with one or both ethnicities/races or neither. This would allow me to explore multiple identities from an ecological approach. Another avenue I would explore is whether this classification model can be translated to immigrants and the predictor variables how whether they fit well to certain environments. 
+
+\newpage
+
+# References
+
+
+```{r create_r-references}
+r_refs(file = "r-references.bib")
+
+```
+
+
+```
+
+
+\begingroup
+\setlength{\parindent}{-0.5in}
+\setlength{\leftskip}{0.5in}
+
+<div id="refs" custom-style="Bibliography"></div>
+\endgroup
